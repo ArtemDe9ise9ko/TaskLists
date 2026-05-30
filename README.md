@@ -50,6 +50,7 @@ the Development environment.
 - Stage 1: Architecture and API Contract - Done
 - Stage 2: Solution Skeleton - Done
 - Stage 3: Domain and Application Contracts - Done
+- Stage 4: Application Service Implementation - Done
 
 ## Implemented In This Stage
 
@@ -72,6 +73,10 @@ the Development environment.
   `NotFoundException`, and `ConflictException`.
 - Unit tests for access-control rules.
 - Unit tests for domain validation.
+- Application-layer `TaskListService` implemented against repository
+  abstractions.
+- Internal DTO mapping and application-level validation.
+- Unit tests for task-list service business rules.
 
-Business logic, CRUD endpoints, MongoDB repositories, and the TypeScript
-provider are intentionally deferred to later stages.
+REST CRUD endpoints, MongoDB repositories, and the TypeScript provider are
+intentionally deferred to later stages.

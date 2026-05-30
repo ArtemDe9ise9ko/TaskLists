@@ -33,7 +33,7 @@ public interface ITaskListService
         int pageSize,
         CancellationToken cancellationToken);
 
-    Task AddShareAsync(
+    Task<TaskListShareResponse> AddShareAsync(
         string taskListId,
         AddTaskListShareRequest request,
         string currentUserId,
