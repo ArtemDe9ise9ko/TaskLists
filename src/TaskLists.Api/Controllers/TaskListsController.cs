@@ -32,8 +32,8 @@ public sealed class TaskListsController(
             currentUserProvider.GetRequiredUserId(),
             cancellationToken);
 
-        return CreatedAtAction(
-            nameof(GetByIdAsync),
+        return CreatedAtRoute(
+            "GetTaskListById",
             new { id = response.Id },
             response);
     }
@@ -54,7 +54,7 @@ public sealed class TaskListsController(
         return Ok(response);
     }
 
-    [HttpGet("{id}")]
+    [HttpGet("{id}", Name = "GetTaskListById")]
     [ProducesResponseType<TaskListDetailsResponse>(StatusCodes.Status200OK)]
     public async Task<ActionResult<TaskListDetailsResponse>> GetByIdAsync(
         string id,
