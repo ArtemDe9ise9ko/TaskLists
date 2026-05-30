@@ -21,4 +21,8 @@ public interface ITaskListShareRepository
         string taskListId,
         string userId,
         CancellationToken cancellationToken);
+
+    Task DeleteByTaskListIdAsync(
+        string taskListId,
+        CancellationToken cancellationToken);
 }

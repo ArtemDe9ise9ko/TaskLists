@@ -10,7 +10,7 @@ The solution is split into focused layers:
 - `TaskLists.Application`: use-case orchestration and application abstractions.
 - `TaskLists.Domain`: domain models and business rules.
 - `TaskLists.Contracts`: request and response DTOs.
-- `TaskLists.Infrastructure`: MongoDB configuration and future persistence implementations.
+  `TaskLists.Infrastructure`: MongoDB configuration, document mappings, indexes, and repository implementations.
 - `TaskLists.Tests`: automated tests.
 
 The detailed architecture and API contract are documented in
@@ -51,6 +51,7 @@ the Development environment.
 - Stage 2: Solution Skeleton - Done
 - Stage 3: Domain and Application Contracts - Done
 - Stage 4: Application Service Implementation - Done
+- Stage 5: MongoDB Persistence Implementation - Done
 
 ## Implemented In This Stage
 
@@ -77,6 +78,11 @@ the Development environment.
   abstractions.
 - Internal DTO mapping and application-level validation.
 - Unit tests for task-list service business rules.
+- Official MongoDB driver in the Infrastructure layer.
+- MongoDB document models and explicit domain mappings.
+- Infrastructure repository implementations.
+- Idempotent MongoDB index creation during application startup.
+- Share-relation cleanup when a task list is deleted.
 
-REST CRUD endpoints, MongoDB repositories, and the TypeScript provider are
-intentionally deferred to later stages.
+REST CRUD endpoints and the TypeScript provider are intentionally deferred to
+later stages.

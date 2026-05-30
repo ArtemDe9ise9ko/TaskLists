@@ -89,6 +89,21 @@ public sealed class TaskListServiceTests
     }
 
     [Fact]
+    public async Task DeleteAsync_RemovesTaskListShares()
+    {
+        var context = CreateContext(CreateTaskList());
+        context.Shares.Add(CreateShare(userId: "shared-user"));
+
+        await context.Service.DeleteAsync(
+            "task-list-id",
+            "owner-user",
+            CancellationToken.None);
+
+        Assert.DoesNotContain("task-list-id", context.TaskLists.Items.Keys);
+        Assert.False(context.Shares.Exists("task-list-id", "shared-user"));
+    }
+
+    [Fact]
     public async Task AddShareAsync_AllowsOwner()
     {
         var context = CreateContext(CreateTaskList());
@@ -336,6 +351,14 @@ public sealed class TaskListServiceTests
             _shares.RemoveAll(share =>
                 share.TaskListId == taskListId && share.UserId == userId);
 
+            return Task.CompletedTask;
+        }
+
+        public Task DeleteByTaskListIdAsync(
+            string taskListId,
+            CancellationToken cancellationToken)
+        {
+            _shares.RemoveAll(share => share.TaskListId == taskListId);
             return Task.CompletedTask;
         }
     }

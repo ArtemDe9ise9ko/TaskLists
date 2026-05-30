@@ -71,8 +71,9 @@ public sealed class TaskListService(
         }
 
         await taskListRepository.DeleteAsync(taskList.Id, cancellationToken);
-
-        // Share cleanup will be coordinated when persistence implementations are added.
+        await taskListShareRepository.DeleteByTaskListIdAsync(
+            taskList.Id,
+            cancellationToken);
     }
 
     public async Task<TaskListDetailsResponse> GetByIdAsync(
