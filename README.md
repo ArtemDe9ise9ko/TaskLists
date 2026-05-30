@@ -54,6 +54,7 @@ the Development environment.
 - Stage 4: Application Service Implementation - Done
 - Stage 5: MongoDB Persistence Implementation - Done
 - Stage 6: REST API Controllers and ProblemDetails Mapping - Done
+- Stage 7: TypeScript API Provider - Done
 
 ## Implemented In This Stage
 
@@ -90,8 +91,13 @@ the Development environment.
 - Centralized Problem Details exception mapping.
 - Swagger-visible API endpoints.
 - Manual API testing notes.
+- Standalone TypeScript provider in `typescript-provider/`.
+- Typed API methods, `X-User-Id` injection, request configuration, and Problem
+  Details error mapping.
+- No TypeScript UI components or frontend framework dependencies.
 
-The TypeScript provider is intentionally deferred to a later stage.
+The TypeScript provider is ready for future UI integration without coupling
+the project to a frontend framework.
 
 ## Manual API Testing
 
