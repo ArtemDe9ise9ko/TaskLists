@@ -1,52 +1,170 @@
-# Task Lists API
+# Shared Task Lists API
 
-A .NET 8 Web API test assignment for managing task lists shared between users.
+A production-style .NET 8 Web API test assignment for managing task lists that
+can be shared between users. The repository includes the backend, MongoDB
+persistence, automated tests, Docker Compose setup, Swagger documentation, and
+a framework-agnostic TypeScript API provider.
+
+## Assignment Coverage
+
+- Create, list, get, update, and delete task lists.
+- Share task lists with users and remove share relations.
+- Return only lists owned by or shared with the current user.
+- Enforce owner-only deletion and share management.
+- Allow owners and shared users to read, update, and view shares.
+- Provide offset pagination ordered by newest task lists first.
+
+## Tech Stack
+
+- .NET 8
+- ASP.NET Core Web API
+- MongoDB with `MongoDB.Driver`
+- Docker Compose
+- xUnit
+- Swagger/OpenAPI
+- TypeScript provider using native `fetch`
 
 ## Architecture
 
-The solution is split into focused layers:
+```text
+src/
+  TaskLists.Api/             HTTP transport, middleware, Swagger, composition root
+  TaskLists.Application/     Use cases, policies, abstractions, application errors
+  TaskLists.Domain/          Pragmatic domain models and invariants
+  TaskLists.Contracts/       Request and response DTOs
+  TaskLists.Infrastructure/  MongoDB documents, mappings, repositories, indexes
+tests/
+  TaskLists.Tests/           Domain, access-policy, and application-service tests
+typescript-provider/         Framework-agnostic typed API client
+```
 
-- `TaskLists.Api`: HTTP transport, OpenAPI, middleware, and composition root.
-- `TaskLists.Application`: use-case orchestration and application abstractions.
-- `TaskLists.Domain`: domain models and business rules.
-- `TaskLists.Contracts`: request and response DTOs.
-- `TaskLists.Infrastructure`: MongoDB configuration, document mappings, indexes,
-  and repository implementations.
-- `TaskLists.Tests`: automated tests.
-
-The detailed architecture and API contract are documented in
+The detailed design is documented in
 [`docs/architecture-and-api-contract.md`](docs/architecture-and-api-contract.md).
 
-## Prerequisites
+## Architecture Decisions
+
+- MediatR is intentionally not used because the assignment discourages it.
+- Domain and Contracts do not depend on transport or infrastructure.
+- Application depends on repository abstractions, not MongoDB or HTTP.
+- MongoDB implementation details are isolated in Infrastructure.
+- `X-User-Id` is a temporary current-user mechanism instead of authentication.
+- API failures use consistent Problem Details responses.
+- The TypeScript provider is framework-agnostic and contains no UI components.
+
+## Implemented Features
+
+- Layered .NET 8 solution with dependency injection.
+- Pragmatic `TaskList` and `TaskListShare` domain models.
+- Explicit application service and access-control policy.
+- MongoDB documents, mappings, repositories, indexes, and share cleanup.
+- REST controllers, Swagger documentation, and `GET /health`.
+- Centralized Problem Details exception mapping.
+- Unit tests for domain validation, permissions, and application behavior.
+- Typed TypeScript provider with configurable requests and error mapping.
+
+## API Endpoints
+
+All API endpoints except `GET /health` require an `X-User-Id` header.
+
+| Method   | Path                                   | Description                |
+| -------- | -------------------------------------- | -------------------------- |
+| `GET`    | `/health`                              | Check API health           |
+| `POST`   | `/api/task-lists`                      | Create a task list         |
+| `GET`    | `/api/task-lists?page=1&pageSize=20`   | List accessible task lists |
+| `GET`    | `/api/task-lists/{id}`                 | Get a task list            |
+| `PUT`    | `/api/task-lists/{id}`                 | Update a task list         |
+| `DELETE` | `/api/task-lists/{id}`                 | Delete an owned task list  |
+| `POST`   | `/api/task-lists/{id}/shares`          | Share an owned task list   |
+| `GET`    | `/api/task-lists/{id}/shares`          | View task-list shares      |
+| `DELETE` | `/api/task-lists/{id}/shares/{userId}` | Remove a share relation    |
+
+## Current User
+
+Authentication is intentionally outside the assignment scope. Send the current
+user as a required request parameter:
+
+```http
+X-User-Id: user-1
+```
+
+Missing, empty, duplicated, or oversized values return `400 Bad Request`. In a
+production system, the provider can be replaced by authenticated claims without
+changing application logic.
+
+## Error Handling
+
+The API returns `application/problem+json` responses with a trace ID.
+
+| Status                      | Meaning                                         |
+| --------------------------- | ----------------------------------------------- |
+| `400 Bad Request`           | Validation error or missing/invalid `X-User-Id` |
+| `403 Forbidden`             | Current user lacks permission                   |
+| `404 Not Found`             | Task list does not exist                        |
+| `409 Conflict`              | Duplicate share relation or similar conflict    |
+| `500 Internal Server Error` | Unexpected server error                         |
+
+## Run Locally
+
+Prerequisites:
 
 - .NET 8 SDK or a newer SDK capable of targeting .NET 8.
 - Docker with Docker Compose.
+- Node.js and npm for the optional TypeScript provider build.
 
-## Run MongoDB
+Start MongoDB:
 
 ```sh
 docker compose up -d
 ```
 
-MongoDB is exposed at `mongodb://localhost:27017`.
-
-## Build
-
-```sh
-dotnet restore TaskLists.sln
-dotnet build TaskLists.sln
-```
-
-## Run The API
+Run the API:
 
 ```sh
 dotnet run --project src/TaskLists.Api
 ```
 
-Use `GET /health` to verify that the API is running. Swagger UI is enabled in
-the Development environment.
+Open Swagger UI at `http://localhost:5091/swagger` when using the default
+development launch profile.
 
-## Current Stage
+## Verification
+
+Run backend restore, build, and tests:
+
+```sh
+dotnet restore TaskLists.sln
+dotnet build TaskLists.sln --no-restore
+dotnet test TaskLists.sln --no-build
+```
+
+Build and typecheck the TypeScript provider:
+
+```sh
+cd typescript-provider
+npm install
+npm run typecheck
+npm run build
+```
+
+## Manual Scenario
+
+Use Swagger UI or an HTTP client:
+
+1. Start MongoDB and run the API.
+2. Create a list as `user-1`.
+3. Get the list as `user-1`.
+4. Share the list with `user-2`.
+5. Get the shared list as `user-2`.
+6. Update the shared list as `user-2`.
+7. Try to delete it as `user-2`; expect `403 Forbidden`.
+8. Delete it as `user-1`; expect `204 No Content`.
+
+## TypeScript Provider
+
+The provider lives in [`typescript-provider/`](typescript-provider/). It offers
+typed API methods, `X-User-Id` injection through `getUserId`, request
+configuration, and Problem Details error mapping without UI dependencies.
+
+## Stage Status
 
 - Stage 1: Architecture and API Contract - Done
 - Stage 2: Solution Skeleton - Done
@@ -55,88 +173,4 @@ the Development environment.
 - Stage 5: MongoDB Persistence Implementation - Done
 - Stage 6: REST API Controllers and ProblemDetails Mapping - Done
 - Stage 7: TypeScript API Provider - Done
-
-## Implemented In This Stage
-
-- .NET 8 solution and project structure.
-- Swagger/OpenAPI setup.
-- `GET /health` endpoint.
-- Centralized exception middleware skeleton.
-- `X-User-Id` current user provider.
-- Application and Infrastructure DI extension methods.
-- MongoDB options binding.
-- Docker Compose with MongoDB.
-- Pragmatic domain models: `TaskList` and `TaskListShare`.
-- Request and response DTO contracts.
-- `PagedResponse<T>`.
-- Repository abstraction interfaces.
-- `ITaskListService` interface.
-- `IClock` and `SystemClock`.
-- `ITaskListAccessPolicy` and `TaskListAccessPolicy`.
-- Application exceptions: `ValidationException`, `ForbiddenException`,
-  `NotFoundException`, and `ConflictException`.
-- Unit tests for access-control rules.
-- Unit tests for domain validation.
-- Application-layer `TaskListService` implemented against repository
-  abstractions.
-- Internal DTO mapping and application-level validation.
-- Unit tests for task-list service business rules.
-- Official MongoDB driver in the Infrastructure layer.
-- MongoDB document models and explicit domain mappings.
-- Infrastructure repository implementations.
-- Idempotent MongoDB index creation during application startup.
-- Share-relation cleanup when a task list is deleted.
-- REST controllers for task lists and share relations.
-- Required `X-User-Id` request handling.
-- Centralized Problem Details exception mapping.
-- Swagger-visible API endpoints.
-- Manual API testing notes.
-- Standalone TypeScript provider in `typescript-provider/`.
-- Typed API methods, `X-User-Id` injection, request configuration, and Problem
-  Details error mapping.
-- No TypeScript UI components or frontend framework dependencies.
-
-The TypeScript provider is ready for future UI integration without coupling
-the project to a frontend framework.
-
-## Manual API Testing
-
-Start MongoDB and run the API:
-
-```sh
-docker compose up -d
-dotnet run --project src/TaskLists.Api
-```
-
-Open Swagger UI at `http://localhost:5091/swagger` when using the default
-development launch profile.
-
-Create a task list:
-
-```sh
-curl -X POST http://localhost:5091/api/task-lists \
-  -H "Content-Type: application/json" \
-  -H "X-User-Id: owner-user" \
-  -d "{\"title\":\"Release checklist\"}"
-```
-
-Use the returned task-list ID in the following requests:
-
-```sh
-curl "http://localhost:5091/api/task-lists?page=1&pageSize=20" \
-  -H "X-User-Id: owner-user"
-
-curl -X POST http://localhost:5091/api/task-lists/{id}/shares \
-  -H "Content-Type: application/json" \
-  -H "X-User-Id: owner-user" \
-  -d "{\"userId\":\"shared-user\"}"
-
-curl http://localhost:5091/api/task-lists/{id} \
-  -H "X-User-Id: shared-user"
-
-curl -X DELETE http://localhost:5091/api/task-lists/{id} \
-  -H "X-User-Id: shared-user"
-```
-
-The final request returns `403 Forbidden` because shared users cannot delete a
-task list.
+- Stage 8: Final Polish, Full Verification and Submission Readiness - Done

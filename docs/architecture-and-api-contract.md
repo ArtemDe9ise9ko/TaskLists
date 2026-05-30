@@ -8,20 +8,20 @@ Build a RESTful Web API using .NET 8 for managing shared task lists.
 
 Users can create and manage task lists and share them with other users. Authentication and authorization infrastructure are outside the scope of this test assignment. Each request identifies the current user through an `X-User-Id` header.
 
-This document defines the architecture and API contract only. Implementation is intentionally deferred to later stages.
+This document captures the architecture decisions and API contract used by the implementation.
 
 ## 2. Key Decisions
 
-| Area | Decision |
-| --- | --- |
-| Runtime | .NET 8 |
-| API style | RESTful HTTP API |
-| Persistence | MongoDB |
-| Application flow | Explicit application services; no MediatR |
-| Current user | `X-User-Id` request header |
-| Pagination | Offset pagination with `page` and `pageSize` |
-| Sharing model | Separate `taskListShares` collection |
-| Unit of Work | Not required at this stage |
+| Area             | Decision                                     |
+| ---------------- | -------------------------------------------- |
+| Runtime          | .NET 8                                       |
+| API style        | RESTful HTTP API                             |
+| Persistence      | MongoDB                                      |
+| Application flow | Explicit application services; no MediatR    |
+| Current user     | `X-User-Id` request header                   |
+| Pagination       | Offset pagination with `page` and `pageSize` |
+| Sharing model    | Separate `taskListShares` collection         |
+| Unit of Work     | Not required at this stage                   |
 
 ## 3. Proposed Solution Structure
 
@@ -60,20 +60,16 @@ src/
     Options/
 
 tests/
-  TaskLists.Domain.Tests/
-  TaskLists.Application.Tests/
-  TaskLists.Infrastructure.IntegrationTests/
-  TaskLists.Api.IntegrationTests/
+  TaskLists.Tests/
 
-clients/
-  typescript/
+typescript-provider/
 ```
 
 Project references:
 
 ```text
 TaskLists.Api            -> TaskLists.Application, TaskLists.Contracts, TaskLists.Infrastructure
-TaskLists.Application    -> TaskLists.Domain
+TaskLists.Application    -> TaskLists.Domain, TaskLists.Contracts
 TaskLists.Infrastructure -> TaskLists.Application, TaskLists.Domain
 TaskLists.Contracts      -> no project dependencies
 TaskLists.Domain         -> no project dependencies
@@ -99,7 +95,7 @@ TaskLists.Domain         -> no project dependencies
 - Defines persistence interfaces implemented by infrastructure.
 - Remains independent from ASP.NET Core and MongoDB.
 
-Suggested services:
+Application service:
 
 ```text
 ITaskListService
@@ -108,11 +104,9 @@ ITaskListService
   GetByIdAsync
   UpdateAsync
   DeleteAsync
-
-ITaskListShareService
-  AddAsync
-  GetByTaskListIdAsync
-  RemoveAsync
+  AddShareAsync
+  GetSharesAsync
+  RemoveShareAsync
 ```
 
 ### `TaskLists.Domain`
@@ -144,8 +138,8 @@ TaskList
   Id: string
   Title: string
   OwnerUserId: string
-  CreatedAtUtc: DateTimeOffset
-  UpdatedAtUtc: DateTimeOffset
+  CreatedAtUtc: DateTime
+  UpdatedAtUtc: DateTime
 ```
 
 Rules:
@@ -161,13 +155,13 @@ Rules:
 TaskListShare
   Id: string
   TaskListId: string
-  SharedWithUserId: string
-  CreatedAtUtc: DateTimeOffset
+  UserId: string
+  CreatedAtUtc: DateTime
 ```
 
 Rules:
 
-- A relation is unique for `(TaskListId, SharedWithUserId)`.
+- A relation is unique for `(TaskListId, UserId)`.
 - The owner is not added as a shared user because ownership already grants access.
 - Only the owner can add or remove share relations.
 
@@ -177,18 +171,19 @@ IDs are primitive strings and are exposed as opaque values. Do not introduce cus
 
 Base path: `/api/task-lists`
 
-Every endpoint requires an `X-User-Id` header.
+Every task-list endpoint requires an `X-User-Id` header. The health endpoint
+does not require it.
 
-| Method | Path | Purpose | Allowed caller | Success status |
-| --- | --- | --- | --- | --- |
-| `POST` | `/api/task-lists` | Create a task list | Any identified user | `201 Created` |
-| `GET` | `/api/task-lists?page=1&pageSize=20` | Get accessible task lists | Any identified user | `200 OK` |
-| `GET` | `/api/task-lists/{id}` | Get one task list | Owner or shared user | `200 OK` |
-| `PUT` | `/api/task-lists/{id}` | Update task list title | Owner or shared user | `200 OK` |
-| `DELETE` | `/api/task-lists/{id}` | Delete a task list | Owner only | `204 No Content` |
-| `POST` | `/api/task-lists/{id}/shares` | Add a share relation | Owner only | `201 Created` |
-| `GET` | `/api/task-lists/{id}/shares` | Get users shared with a list | Owner or shared user | `200 OK` |
-| `DELETE` | `/api/task-lists/{id}/shares/{userId}` | Remove a share relation | Owner only | `204 No Content` |
+| Method   | Path                                   | Purpose                      | Allowed caller       | Success status   |
+| -------- | -------------------------------------- | ---------------------------- | -------------------- | ---------------- |
+| `POST`   | `/api/task-lists`                      | Create a task list           | Any identified user  | `201 Created`    |
+| `GET`    | `/api/task-lists?page=1&pageSize=20`   | Get accessible task lists    | Any identified user  | `200 OK`         |
+| `GET`    | `/api/task-lists/{id}`                 | Get one task list            | Owner or shared user | `200 OK`         |
+| `PUT`    | `/api/task-lists/{id}`                 | Update task list title       | Owner or shared user | `200 OK`         |
+| `DELETE` | `/api/task-lists/{id}`                 | Delete a task list           | Owner only           | `204 No Content` |
+| `POST`   | `/api/task-lists/{id}/shares`          | Add a share relation         | Owner only           | `200 OK`         |
+| `GET`    | `/api/task-lists/{id}/shares`          | Get users shared with a list | Owner or shared user | `200 OK`         |
+| `DELETE` | `/api/task-lists/{id}/shares/{userId}` | Remove a share relation      | Owner only           | `204 No Content` |
 
 Notes:
 
@@ -196,7 +191,7 @@ Notes:
 - `POST /api/task-lists` returns a `Location` header for `/api/task-lists/{id}`.
 - `PUT` replaces the currently mutable resource fields. At this stage, that is only `title`.
 - Adding a duplicate share relation returns `409 Conflict`.
-- Removing a missing share relation returns `404 Not Found`.
+- Removing a missing share relation is idempotent and returns `204 No Content`.
 - Route values must be URL encoded by clients.
 
 ## 7. Request and Response DTO Draft
@@ -214,27 +209,27 @@ public sealed record AddTaskListShareRequest(string UserId);
 ### Responses
 
 ```csharp
-public sealed record TaskListResponse(
+public sealed record TaskListDetailsResponse(
     string Id,
     string Title,
     string OwnerUserId,
-    DateTimeOffset CreatedAtUtc,
-    DateTimeOffset UpdatedAtUtc);
+    DateTime CreatedAtUtc,
+    DateTime UpdatedAtUtc);
+
+public sealed record TaskListSummaryResponse(
+    string Id,
+    string Title,
+    DateTime CreatedAtUtc);
 
 public sealed record TaskListShareResponse(
     string UserId,
-    DateTimeOffset CreatedAtUtc);
-
-public sealed record TaskListSharesResponse(
-    string TaskListId,
-    IReadOnlyCollection<TaskListShareResponse> Items);
+    DateTime CreatedAtUtc);
 
 public sealed record PagedResponse<T>(
-    IReadOnlyCollection<T> Items,
+    IReadOnlyList<T> Items,
     int Page,
     int PageSize,
-    long TotalCount,
-    int TotalPages);
+    long TotalCount);
 ```
 
 Example create request:
@@ -271,8 +266,7 @@ Example paged response:
   "items": [],
   "page": 1,
   "pageSize": 20,
-  "totalCount": 0,
-  "totalPages": 0
+  "totalCount": 0
 }
 ```
 
@@ -287,9 +281,9 @@ X-User-Id: user-123
 The API layer validates the header and passes the current user ID explicitly to application services. A small API-layer abstraction can centralize access:
 
 ```csharp
-public interface ICurrentUserAccessor
+public interface ICurrentUserProvider
 {
-    string UserId { get; }
+    string? UserId { get; }
 }
 ```
 
@@ -305,14 +299,14 @@ In a production system, the API implementation can be replaced with one that rea
 
 The list endpoint returns only task lists where the current user is the owner or has a share relation. Any identified user can create a new list and becomes its owner.
 
-| Operation | Owner | Shared User |
-| --- | --- | --- |
-| Get List | Yes | Yes |
-| Update List | Yes | Yes |
-| Delete List | Yes | No |
-| View Shares | Yes | Yes |
-| Add Share | Yes | No |
-| Remove Share | Yes | No |
+| Operation    | Owner | Shared User |
+| ------------ | ----- | ----------- |
+| Get List     | Yes   | Yes         |
+| Update List  | Yes   | Yes         |
+| Delete List  | Yes   | No          |
+| View Shares  | Yes   | Yes         |
+| Add Share    | Yes   | No          |
+| Remove Share | Yes   | No          |
 
 An unrelated user cannot access any existing task list or its shares. Application services enforce these rules. The API layer is responsible only for transport concerns and error mapping.
 
@@ -320,14 +314,14 @@ An unrelated user cannot access any existing task list or its shares. Applicatio
 
 Use consistent ASP.NET Core Problem Details responses with media type `application/problem+json`.
 
-| Situation | Status |
-| --- | --- |
-| Request validation error | `400 Bad Request` |
-| Missing or invalid `X-User-Id` | `400 Bad Request` |
-| Current user lacks permission | `403 Forbidden` |
-| Task list or share relation not found | `404 Not Found` |
-| Duplicate share relation or attempt to share with owner | `409 Conflict` |
-| Unexpected error | `500 Internal Server Error` |
+| Situation                                               | Status                      |
+| ------------------------------------------------------- | --------------------------- |
+| Request validation error                                | `400 Bad Request`           |
+| Missing or invalid `X-User-Id`                          | `400 Bad Request`           |
+| Current user lacks permission                           | `403 Forbidden`             |
+| Task list or share relation not found                   | `404 Not Found`             |
+| Duplicate share relation or attempt to share with owner | `409 Conflict`              |
+| Unexpected error                                        | `500 Internal Server Error` |
 
 Example:
 
@@ -338,9 +332,7 @@ Example:
   "status": 400,
   "detail": "One or more request values are invalid.",
   "errors": {
-    "title": [
-      "Title must contain between 1 and 255 characters."
-    ]
+    "title": ["Title must contain between 1 and 255 characters."]
   },
   "traceId": "00-..."
 }
@@ -368,7 +360,7 @@ Rules:
 - Minimum `pageSize` is `1`.
 - Maximum `pageSize` is `100`.
 - Results are sorted by `createdAtUtc DESC`, then `id DESC` as a deterministic tie-breaker.
-- The response includes `page`, `pageSize`, `totalCount`, and `totalPages`.
+- The response includes `page`, `pageSize`, and `totalCount`.
 
 Offset pagination was intentionally chosen because it is simpler, easier to review in a test assignment and fully satisfies current requirements. Cursor pagination can be introduced later if scalability requirements increase.
 
@@ -403,7 +395,7 @@ Stores explicit user access relations:
 {
   "_id": "generated-share-id",
   "taskListId": "1f8e714e-640f-45cc-8f97-9a18e54b7bf8",
-  "sharedWithUserId": "user-456",
+  "userId": "user-456",
   "createdAtUtc": "2026-05-30T10:00:00Z"
 }
 ```
@@ -434,16 +426,17 @@ Deleting a task list also requires deleting its share relations. For this assign
 ### `taskLists`
 
 ```text
-{ ownerUserId: 1, createdAtUtc: -1, _id: -1 }
+{ ownerUserId: 1 }
+{ createdAtUtc: -1 }
 { createdAtUtc: -1, _id: -1 }
 ```
 
 ### `taskListShares`
 
 ```text
-{ taskListId: 1, sharedWithUserId: 1 } UNIQUE
-{ sharedWithUserId: 1, taskListId: 1 }
-{ taskListId: 1, createdAtUtc: 1 }
+{ taskListId: 1 }
+{ userId: 1 }
+{ taskListId: 1, userId: 1 } UNIQUE
 ```
 
 These indexes support:
@@ -490,23 +483,21 @@ Index creation should be idempotent and handled by infrastructure startup initia
 - Verify `403 Forbidden` Problem Details for forbidden access.
 - Verify `400`, `404`, `409`, and `500` Problem Details responses where applicable.
 
-## 15. Future TypeScript API Provider
+## 15. TypeScript API Provider
 
-A future TypeScript provider should be a typed API client only, with no UI components.
+The TypeScript provider is a typed API client only, with no UI components.
 
 Suggested structure:
 
 ```text
-clients/typescript/src/
-  api/
-    apiClient.ts
-    problemDetails.ts
-  models/
-    pagination.ts
-    taskList.ts
-    taskListShare.ts
-  taskLists/
-    taskListsApi.ts
+typescript-provider/src/
+  http/
+    ApiClient.ts
+    ApiError.ts
+    ProblemDetails.ts
+  task-lists/
+    TaskListsApi.ts
+    taskLists.types.ts
   index.ts
 ```
 
@@ -519,7 +510,8 @@ It should provide:
 - A `TaskListsApi` class or module for all task-list and sharing operations.
 - No UI components.
 
-The client can later be generated from or validated against the OpenAPI document to reduce contract drift.
+The client can later be generated from or validated against the OpenAPI
+document to reduce contract drift.
 
 ## 16. Implementation Stages
 
@@ -535,23 +527,32 @@ The client can later be generated from or validated against the OpenAPI document
 - Configure OpenAPI and centralized Problem Details handling.
 - Add MongoDB configuration and local development setup.
 
-### Stage 3: Domain and Application Layer
+### Stage 3: Domain and Application Contracts
 
 - Implement pragmatic domain models.
-- Implement application services and repository abstractions.
-- Add access control and application service unit tests.
+- Add repository abstractions, service contracts, access policy, and unit tests.
 
-### Stage 4: MongoDB Infrastructure
+### Stage 4: Application Service Implementation
+
+- Implement application use cases against repository abstractions.
+- Add focused application service unit tests.
+
+### Stage 5: MongoDB Persistence Implementation
 
 - Implement MongoDB documents, mappings, repositories, and index initialization.
-- Add repository and integration tests.
+- Add share cleanup when deleting a task list.
 
-### Stage 5: HTTP API
+### Stage 6: REST API Controllers and ProblemDetails Mapping
 
-- Implement controllers or endpoint handlers, DTO mapping, current-user extraction, and error mapping.
-- Add API integration tests and verify OpenAPI output.
+- Implement controllers, current-user extraction, Problem Details mapping, and
+  Swagger-visible endpoints.
 
-### Stage 6: TypeScript Provider
+### Stage 7: TypeScript API Provider
 
-- Implement or generate the typed TypeScript API provider.
-- Validate it against the running API.
+- Implement the typed, framework-agnostic API provider.
+- Validate it with TypeScript typecheck and build commands.
+
+### Stage 8: Final Polish and Verification
+
+- Reconcile documentation with the implementation.
+- Run backend and TypeScript verification commands.
