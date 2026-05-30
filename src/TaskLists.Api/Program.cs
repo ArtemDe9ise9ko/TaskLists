@@ -1,5 +1,6 @@
 using TaskLists.Api.CurrentUser;
 using TaskLists.Api.Middleware;
+using TaskLists.Api.Swagger;
 using TaskLists.Application;
 using TaskLists.Application.Abstractions.CurrentUser;
 using TaskLists.Infrastructure;
@@ -8,7 +9,10 @@ var builder = WebApplication.CreateBuilder(args);
 
 builder.Services.AddControllers();
 builder.Services.AddEndpointsApiExplorer();
-builder.Services.AddSwaggerGen();
+builder.Services.AddSwaggerGen(options =>
+{
+    options.OperationFilter<RequiredUserIdHeaderOperationFilter>();
+});
 builder.Services.AddHttpContextAccessor();
 builder.Services.AddScoped<ICurrentUserProvider, HttpContextCurrentUserProvider>();
 

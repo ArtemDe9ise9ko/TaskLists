@@ -10,7 +10,8 @@ The solution is split into focused layers:
 - `TaskLists.Application`: use-case orchestration and application abstractions.
 - `TaskLists.Domain`: domain models and business rules.
 - `TaskLists.Contracts`: request and response DTOs.
-  `TaskLists.Infrastructure`: MongoDB configuration, document mappings, indexes, and repository implementations.
+- `TaskLists.Infrastructure`: MongoDB configuration, document mappings, indexes,
+  and repository implementations.
 - `TaskLists.Tests`: automated tests.
 
 The detailed architecture and API contract are documented in
@@ -52,6 +53,7 @@ the Development environment.
 - Stage 3: Domain and Application Contracts - Done
 - Stage 4: Application Service Implementation - Done
 - Stage 5: MongoDB Persistence Implementation - Done
+- Stage 6: REST API Controllers and ProblemDetails Mapping - Done
 
 ## Implemented In This Stage
 
@@ -83,6 +85,52 @@ the Development environment.
 - Infrastructure repository implementations.
 - Idempotent MongoDB index creation during application startup.
 - Share-relation cleanup when a task list is deleted.
+- REST controllers for task lists and share relations.
+- Required `X-User-Id` request handling.
+- Centralized Problem Details exception mapping.
+- Swagger-visible API endpoints.
+- Manual API testing notes.
 
-REST CRUD endpoints and the TypeScript provider are intentionally deferred to
-later stages.
+The TypeScript provider is intentionally deferred to a later stage.
+
+## Manual API Testing
+
+Start MongoDB and run the API:
+
+```sh
+docker compose up -d
+dotnet run --project src/TaskLists.Api
+```
+
+Open Swagger UI at `http://localhost:5091/swagger` when using the default
+development launch profile.
+
+Create a task list:
+
+```sh
+curl -X POST http://localhost:5091/api/task-lists \
+  -H "Content-Type: application/json" \
+  -H "X-User-Id: owner-user" \
+  -d "{\"title\":\"Release checklist\"}"
+```
+
+Use the returned task-list ID in the following requests:
+
+```sh
+curl "http://localhost:5091/api/task-lists?page=1&pageSize=20" \
+  -H "X-User-Id: owner-user"
+
+curl -X POST http://localhost:5091/api/task-lists/{id}/shares \
+  -H "Content-Type: application/json" \
+  -H "X-User-Id: owner-user" \
+  -d "{\"userId\":\"shared-user\"}"
+
+curl http://localhost:5091/api/task-lists/{id} \
+  -H "X-User-Id: shared-user"
+
+curl -X DELETE http://localhost:5091/api/task-lists/{id} \
+  -H "X-User-Id: shared-user"
+```
+
+The final request returns `403 Forbidden` because shared users cannot delete a
+task list.
