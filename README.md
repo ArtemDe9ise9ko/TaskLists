@@ -49,6 +49,7 @@ the Development environment.
 
 - Stage 1: Architecture and API Contract - Done
 - Stage 2: Solution Skeleton - Done
+- Stage 3: Domain and Application Contracts - Done
 
 ## Implemented In This Stage
 
@@ -60,6 +61,17 @@ the Development environment.
 - Application and Infrastructure DI extension methods.
 - MongoDB options binding.
 - Docker Compose with MongoDB.
+- Pragmatic domain models: `TaskList` and `TaskListShare`.
+- Request and response DTO contracts.
+- `PagedResponse<T>`.
+- Repository abstraction interfaces.
+- `ITaskListService` interface.
+- `IClock` and `SystemClock`.
+- `ITaskListAccessPolicy` and `TaskListAccessPolicy`.
+- Application exceptions: `ValidationException`, `ForbiddenException`,
+  `NotFoundException`, and `ConflictException`.
+- Unit tests for access-control rules.
+- Unit tests for domain validation.
 
 Business logic, CRUD endpoints, MongoDB repositories, and the TypeScript
 provider are intentionally deferred to later stages.
